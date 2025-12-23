@@ -2,7 +2,7 @@ name: Update meta4 and README
 
 on:
   schedule:
-    - cron: '0 1 * * *'  # 每天 UTC 1:00
+    - cron: '0 1 * * *'
   workflow_dispatch:
 
 jobs:
@@ -22,19 +22,22 @@ jobs:
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@users.noreply.github.com"
+
           git add Scripts/*.meta4 README.md README_cn.md
           $status = git status --porcelain
+
           if ($status) {
               git commit -m "Update meta4, README and Release (auto)"
               git push
           } else {
               Write-Host "No changes detected."
+          }
 
       - name: Create GitHub Release
         if: success()
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: "auto-generated" # 可改成从脚本生成的 releaseName
+          tag_name: "auto-generated"
           name: "Auto Update meta4 Release"
           draft: false
           prerelease: false

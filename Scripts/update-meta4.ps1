@@ -12,7 +12,7 @@ $meta4Files = Get-ChildItem Scripts -Recurse -Filter *.meta4
 
 # ===== 遍历所有 meta4 文件并更新 =====
 foreach ($file in $meta4Files) {
-    # 在这里实现从 Microsoft Catalog 获取最新 KB 并更新 meta4
+    # 实现从 Microsoft Catalog 获取最新 KB 并更新 meta4
     Write-Host "Processing meta4 file: $($file.FullName)"
     # 如果实际更新了文件，则置为 $true
     $changed = $true
