@@ -1,1 +1,3 @@
 .DS_Store
+Scripts/*.ps1
+.github/workflows/*.yml
