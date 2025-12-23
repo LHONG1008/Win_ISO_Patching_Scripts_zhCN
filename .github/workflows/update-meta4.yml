@@ -13,11 +13,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup PowerShell
-        uses: actions/setup-powershell@v2
-        with:
-          pwsh-version: 'latest'
-
       - name: Update meta4, README and generate Release
         shell: pwsh
         run: .\Scripts\update-meta4.ps1
@@ -34,7 +29,6 @@ jobs:
               git push
           } else {
               Write-Host "No changes detected."
-          }
 
       - name: Create GitHub Release
         if: success()
