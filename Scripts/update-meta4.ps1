@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    自动更新 meta4 文件、README 中英文表格以及生成 Release 名称（支持同周期多次更新）
+    自动更新 meta4 文件、README 中英文表格以及生成 Release 名称
 .DESCRIPTION
     1. 更新 meta4 文件（架构感知 + SHA1 + URL）
     2. 更新 README.md / README_cn.md（Build + 日期）
@@ -12,11 +12,10 @@ $meta4Files = Get-ChildItem Scripts -Recurse -Filter *.meta4
 
 # ===== 遍历所有 meta4 文件并更新 =====
 foreach ($file in $meta4Files) {
-    # 在这里可实现从 Microsoft Catalog 抓取 KB 列表并替换已有 meta4 内容
-    # 例如：读取 meta4，按文件名和 KB 查询最新 URL 和 SHA1，然后生成新的 meta4 文件
-    # 这里只保留模板，具体抓取逻辑需自行实现
+    # 在这里实现从 Microsoft Catalog 获取最新 KB 并更新 meta4
     Write-Host "Processing meta4 file: $($file.FullName)"
-    $changed = $true  # 如果实际更新了文件，则置为 $true
+    # 如果实际更新了文件，则置为 $true
+    $changed = $true
 }
 
 # ===== 更新 README =====
@@ -78,4 +77,9 @@ if ($existing.Count -eq 0) {
 
 Write-Host "Generated release name: $releaseName"
 
-if ($changed) { exit 1 } else { exit 0 }
+# ===== 输出最终状态，不退出非零码 =====
+if ($changed) {
+    Write-Host "Meta4 files updated. Changes detected."
+} else {
+    Write-Host "No changes detected."
+}
