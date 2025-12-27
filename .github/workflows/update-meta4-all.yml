@@ -28,29 +28,37 @@ jobs:
           Set-PSRepository PSGallery -InstallationPolicy Trusted
           Install-Module PSWindowsUpdate -Force
 
-      - name: Scan existing meta4 files
+      - name: Scan existing meta4 files recursively
         shell: pwsh
         run: |
-          $metaFiles = Get-ChildItem -Path script -Filter *.meta4
+          Set-Location $env:GITHUB_WORKSPACE
+
+          # 遍历 script 及其所有子目录
+          $metaFiles = Get-ChildItem -Path script -Filter *.meta4 -Recurse
           $patchList = @()
 
           foreach ($file in $metaFiles) {
-            $name = $file.BaseName
-            if ($name -match "^KB\d+") {
-              $patchList += [PSCustomObject]@{
-                Type = "KB"
-                Id = $name
-                File = $file.FullName
+              $relativePath = $file.FullName.Substring($env:GITHUB_WORKSPACE.Length + 1)
+
+              # NET 补丁目录
+              if ($relativePath -match "netfx4\.8|netfx4\.81") {
+                  $patchList += [PSCustomObject]@{
+                      Type = "NET"
+                      Id = $file.BaseName
+                      File = $file.FullName
+                  }
+              } 
+              # KB 补丁文件名
+              elseif ($file.BaseName -match "^script_\d+") {
+                  $patchList += [PSCustomObject]@{
+                      Type = "KB"
+                      Id = $file.BaseName
+                      File = $file.FullName
+                  }
+              } 
+              else {
+                  Write-Host "Unknown meta4 found: $relativePath"
               }
-            } elseif ($name -match "^netfx4\.8|^netfx4\.81") {
-              $patchList += [PSCustomObject]@{
-                Type = "NET"
-                Id = $name
-                File = $file.FullName
-              }
-            } else {
-              Write-Warning "Unknown patch type: $name"
-            }
           }
 
           $patchList | ConvertTo-Json -Depth 3 | Out-File patch_list.json -Encoding UTF8
@@ -60,75 +68,77 @@ jobs:
       - name: Update meta4 from Catalog (skip existing)
         shell: pwsh
         run: |
+          Set-Location $env:GITHUB_WORKSPACE
           $patchList = Get-Content patch_list.json | ConvertFrom-Json
 
           foreach ($patch in $patchList) {
-            $id = $patch.Id
-            $outFile = $patch.File
+              $id = $patch.Id
+              $outFile = $patch.File
 
-            if (Test-Path $outFile -and $patch.Type -eq "KB") {
-              Write-Host "$outFile exists, skipping (special CAB/MSU or already present)"
-              continue
-            }
-
-            if ($patch.Type -eq "KB") {
-              Write-Host "Processing KB: $id ..."
-              $searchUrl = "https://www.catalog.update.microsoft.com/Search.aspx?q=$id"
-              $html = Invoke-WebRequest $searchUrl -UseBasicParsing
-
-              if ($html.Content -notmatch "ScopedViewInline.aspx\?updateid=([a-f0-9\-]+)") {
-                Write-Warning "UpdateID not found for $id"
-                continue
+              if (Test-Path $outFile -and $patch.Type -eq "KB") {
+                  Write-Host "$outFile exists, skipping (special CAB/MSU or already present)"
+                  continue
               }
 
-              $updateId = $matches[1]
-              $detailUrl = "https://www.catalog.update.microsoft.com/ScopedViewInline.aspx?updateid=$updateId"
-              $detail = Invoke-WebRequest $detailUrl -UseBasicParsing
+              if ($patch.Type -eq "KB") {
+                  Write-Host "Processing KB: $id ..."
+                  $searchUrl = "https://www.catalog.update.microsoft.com/Search.aspx?q=$id"
+                  $html = Invoke-WebRequest $searchUrl -UseBasicParsing
 
-              $fileName = ($detail.Content |
-                Select-String "downloadFiles\[0\].fileName\s*=\s*'([^']+)'" |
-                ForEach-Object { $_.Matches[0].Groups[1].Value })
+                  if ($html.Content -notmatch "ScopedViewInline.aspx\?updateid=([a-f0-9\-]+)") {
+                      Write-Warning "UpdateID not found for $id"
+                      continue
+                  }
 
-              $url = ($detail.Content |
-                Select-String "downloadFiles\[0\].url\s*=\s*'([^']+)'" |
-                ForEach-Object { $_.Matches[0].Groups[1].Value })
+                  $updateId = $matches[1]
+                  $detailUrl = "https://www.catalog.update.microsoft.com/ScopedViewInline.aspx?updateid=$updateId"
+                  $detail = Invoke-WebRequest $detailUrl -UseBasicParsing
 
-              if (-not $fileName -or -not $url) {
-                Write-Warning "Failed to parse metadata for $id"
-                continue
+                  $fileName = ($detail.Content |
+                      Select-String "downloadFiles\[0\].fileName\s*=\s*'([^']+)'" |
+                      ForEach-Object { $_.Matches[0].Groups[1].Value })
+
+                  $url = ($detail.Content |
+                      Select-String "downloadFiles\[0\].url\s*=\s*'([^']+)'" |
+                      ForEach-Object { $_.Matches[0].Groups[1].Value })
+
+                  if (-not $fileName -or -not $url) {
+                      Write-Warning "Failed to parse metadata for $id"
+                      continue
+                  }
+
+                  # 使用数组生成 XML，避免 YAML 解析问题
+                  $xmlLines = @()
+                  $xmlLines += '<?xml version="1.0" encoding="utf-8"?>'
+                  $xmlLines += '<metalink xmlns="urn:ietf:params:xml:ns:metalink">'
+                  $xmlLines += "  <file name=`"$fileName`">"
+                  $xmlLines += "    <url>$url</url>"
+                  $xmlLines += '  </file>'
+                  $xmlLines += '</metalink>'
+
+                  $xmlLines | Out-File $outFile -Encoding UTF8
+                  Write-Host "meta4 generated: $outFile"
               }
-
-              # 生成 XML 使用数组 + +=，避免 @"…@" 多行字符串问题
-              $xmlLines = @()
-              $xmlLines += '<?xml version="1.0" encoding="utf-8"?>'
-              $xmlLines += '<metalink xmlns="urn:ietf:params:xml:ns:metalink">'
-              $xmlLines += "  <file name=`"$fileName`">"
-              $xmlLines += "    <url>$url</url>"
-              $xmlLines += '  </file>'
-              $xmlLines += '</metalink>'
-
-              $xmlLines | Out-File $outFile -Encoding UTF8
-              Write-Host "meta4 generated: $outFile"
-            }
-            elseif ($patch.Type -like "NET*") {
-              Write-Host "Skipping .NET patch $id (keep existing meta4)"
-            }
+              elseif ($patch.Type -like "NET*") {
+                  Write-Host "Skipping .NET patch $id (keep existing meta4)"
+              }
           }
 
       - name: Commit changes if any
         shell: pwsh
         run: |
+          Set-Location $env:GITHUB_WORKSPACE
           if (-not (git status --porcelain)) {
-            Write-Host "No changes detected."
-            exit 0
+              Write-Host "No changes detected."
+              exit 0
           }
 
           if ($env:DRY_RUN -eq "true") {
-            Write-Host "Dry-run: skipping commit/push"
+              Write-Host "Dry-run: skipping commit/push"
           } else {
-            git config user.name "github-actions"
-            git config user.email "github-actions@github.com"
-            git add script/*.meta4 patch_list.json
-            git commit -m "auto: update meta4 for latest Windows and .NET patches"
-            git push
+              git config user.name "github-actions"
+              git config user.email "github-actions@github.com"
+              git add script/*.meta4 patch_list.json
+              git commit -m "auto: update meta4 for latest Windows and .NET patches"
+              git push
           }
