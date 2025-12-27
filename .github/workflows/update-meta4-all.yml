@@ -1,95 +1,92 @@
-name: Update Windows KB meta4
+name: Update KB meta4
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '0 5 * * *'  # 每天 5 点运行，可按需修改
 
 jobs:
-  update-kb-meta4:
+  update-meta4:
     runs-on: windows-latest
+
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+    - name: Checkout repository
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0  # 需要完整历史记录以便推送
 
-      - name: Setup PowerShell
-        uses: actions/setup-powershell@v2
-        with:
-          pwsh-version: '7.3'
+    - name: Setup PowerShell
+      uses: microsoft/setup-powershell@v2
+      with:
+        pwsh-version: '7.3'
 
-      - name: Install HtmlAgilityPack
-        shell: pwsh
-        run: |
-          Install-Package -Name HtmlAgilityPack -Source PSGallery -Force -Scope CurrentUser
+    - name: Run KB meta4 update script
+      shell: pwsh
+      run: |
+        Set-Location $env:GITHUB_WORKSPACE
 
-      - name: Update meta4 files
-        shell: pwsh
-        run: |
-          # 设置工作目录
-          Set-Location $env:GITHUB_WORKSPACE
+        $patchList = Get-Content patch_list.json | ConvertFrom-Json
 
-          # 遍历 Scripts 下所有 meta4 文件
-          $metaFiles = Get-ChildItem -Path ".\Scripts" -Recurse -Filter "*.meta4"
+        foreach ($patch in $patchList) {
+            $id = $patch.Id
+            $outFile = $patch.File
 
-          foreach ($file in $metaFiles) {
-              Write-Host "Processing $($file.FullName)..."
+            if ($patch.Type -eq "KB") {
+                Write-Host "Processing KB: $id ..."
+                $searchUrl = "https://www.catalog.update.microsoft.com/Search.aspx?q=$id"
+                $html = Invoke-WebRequest $searchUrl -UseBasicParsing
 
-              # 加载 XML
-              [xml]$xml = Get-Content $file.FullName
+                if ($html.Content -notmatch "ScopedViewInline.aspx\?updateid=([a-f0-9\-]+)") {
+                    Write-Warning "UpdateID not found for $id"
+                    continue
+                }
 
-              foreach ($node in $xml.metalink.file) {
-                  $name = $node.name
-                  if ($name -match "kb(\d+)") {
-                      $kbId = $matches[1]
-                      Write-Host "Found KB$kbId"
+                $updateId = $matches[1]
+                $detailUrl = "https://www.catalog.update.microsoft.com/ScopedViewInline.aspx?updateid=$updateId"
+                $detail = Invoke-WebRequest $detailUrl -UseBasicParsing
 
-                      # 下载 Catalog 页面
-                      $searchUrl = "https://www.catalog.update.microsoft.com/Search.aspx?q=KB$kbId"
-                      $html = Invoke-WebRequest $searchUrl -UseBasicParsing
+                $fileName = ($detail.Content |
+                    Select-String "downloadFiles\[0\].fileName\s*=\s*'([^']+)'" |
+                    ForEach-Object { $_.Matches[0].Groups[1].Value })
 
-                      if ($html.Content -notmatch "ScopedViewInline.aspx\?updateid=([a-f0-9\-]+)") {
-                          Write-Warning "UpdateID not found for KB$kbId"
-                          continue
-                      }
-                      $updateId = $matches[1]
-                      $detailUrl = "https://www.catalog.update.microsoft.com/ScopedViewInline.aspx?updateid=$updateId"
-                      $detail = Invoke-WebRequest $detailUrl -UseBasicParsing
+                $url = ($detail.Content |
+                    Select-String "downloadFiles\[0\].url\s*=\s*'([^']+)'" |
+                    ForEach-Object { $_.Matches[0].Groups[1].Value })
 
-                      # 解析文件名和 URL
-                      Add-Type -AssemblyName System.Web
-                      $doc = New-Object HtmlAgilityPack.HtmlDocument
-                      $doc.LoadHtml($detail.Content)
+                if (-not $fileName -or -not $url) {
+                    Write-Warning "Failed to parse metadata for $id"
+                    continue
+                }
 
-                      $fileNode = $doc.DocumentNode.SelectSingleNode("//script[contains(text(),'downloadFiles')]")
+                $hash = ($fileName -split "_")[-1] -replace "\.(msu|cab)$",""
 
+                $xml = @"
+<?xml version="1.0" encoding="utf-8"?>
+<metalink xmlns="urn:ietf:params:xml:ns:metalink">
+  <file name="$fileName">
+    <hash type="sha-1">$hash</hash>
+    <url>$url</url>
+  </file>
+</metalink>
+"@
 
-                      if ($fileNode -match "downloadFiles\[0\]\.fileName\s*=\s*'([^']+)'.*downloadFiles\[0\]\.url\s*=\s*'([^']+)'") {
-                          $newName = $matches[1]
-                          $newUrl  = $matches[2]
+                $xml | Out-File $outFile -Encoding UTF8
+                Write-Host "Updated KB $id: $fileName"
+            }
+            elseif ($patch.Type -like "NET*") {
+                Write-Host "Skipping .NET patch $id (keep existing meta4)"
+            }
+        }
 
-                          # 替换 XML
-                          $node.name = $newName
-                          $node.url = $newUrl
+    - name: Commit and push updates
+      shell: pwsh
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        Set-Location $env:GITHUB_WORKSPACE
+        git config user.name "github-actions"
+        git config user.email "github-actions@github.com"
 
-                          # hash 可选：如果 URL 中包含 hash 或自己计算
-                          if ($newName -match "_([a-f0-9]{40})") {
-                              $node.hash = $matches[1]
-                          }
-
-                          Write-Host "Updated KB$kbId: $newName"
-                      } else {
-                          Write-Warning "Failed to parse KB$kbId"
-                      }
-                  }
-              }
-
-              # 保存 XML
-              $xml.Save($file.FullName)
-          }
-
-      - name: Commit & Push
-        shell: pwsh
-        run: |
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
-          git add Scripts/**/*.meta4
-          git commit -m "Auto update KB meta4"
-          git push origin HEAD:test
+        git add Scripts/**/*.meta4
+        git commit -m "auto: update meta4 for latest Windows and .NET patches" -a -m "Auto-generated by workflow" || Write-Host "No changes to commit"
+        git push origin HEAD:test || Write-Host "Nothing to push or failed"
