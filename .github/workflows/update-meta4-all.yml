@@ -1,89 +1,89 @@
-name: Update Windows KB meta4
+name: Update Meta4
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * *'  # 每天凌晨 2 点自动运行，可根据需求修改
 
 jobs:
-  update-kb:
+  update-meta4:
     runs-on: windows-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Setup PowerShell
-        uses: PowerShell/PowerShell@v7.3.9 # 官方 PowerShell Action
-        with:
-          version: '7.3'
-
-      - name: Update KB meta4
+      - name: Set working directory
+        run: Set-Location $env:GITHUB_WORKSPACE
         shell: pwsh
-        run: |
-          Set-Location $env:GITHUB_WORKSPACE
 
-          $patchList = Get-Content patch_list.json | ConvertFrom-Json
+      - name: Update KB meta4 files
+        run: |
+          $patchListPath = Join-Path $env:GITHUB_WORKSPACE "patch_list.json"
+          if (-Not (Test-Path $patchListPath)) {
+              Write-Host "patch_list.json not found, generating..."
+              $patchList = @(
+                  # 示例，可根据需要生成
+                  @{ Type = "KB"; Id = "script_26100_x64"; File = "Scripts\script_26100_x64.meta4" }
+                  @{ Type = "KB"; Id = "script_26100_x86"; File = "Scripts\script_26100_x86.meta4" }
+              )
+              $patchList | ConvertTo-Json | Out-File $patchListPath -Encoding UTF8
+          } else {
+              $patchList = Get-Content $patchListPath | ConvertFrom-Json
+          }
 
           foreach ($patch in $patchList) {
-              $id = $patch.Id
-              $outFile = $patch.File
-
-              if ($patch.Type -eq "KB" -and (Test-Path $outFile)) {
-                  Write-Host "$outFile exists, skipping"
+              $meta4File = $patch.File
+              if (-not (Test-Path $meta4File)) {
+                  Write-Warning "$meta4File not found, skipping..."
                   continue
               }
 
               if ($patch.Type -eq "KB") {
-                  Write-Host "Processing KB: $id ..."
+                  Write-Host "Processing $meta4File..."
 
-                  $searchUrl = "https://www.catalog.update.microsoft.com/Search.aspx?q=$id"
-                  $html = Invoke-WebRequest $searchUrl -UseBasicParsing
+                  # 读取原始 meta4 内容
+                  [xml]$xml = Get-Content $meta4File
 
-                  if ($html.Content -notmatch "ScopedViewInline.aspx\?updateid=([a-f0-9\-]+)") {
-                      Write-Warning "UpdateID not found for $id"
-                      continue
+                  foreach ($fileNode in $xml.metalink.file) {
+                      $name = $fileNode.name
+                      if ($name -match "kb(\d+)") {
+                          $kbId = $matches[1]
+                          # 这里可以调用你抓取最新 KB 的逻辑
+                          # 示例：直接替换 url/hash
+                          $newUrl = $fileNode.url  # 替换为最新 URL
+                          $newHash = $fileNode.hash.'#text' # 替换为最新 hash
+
+                          # 写回 XML
+                          $fileNode.url = $newUrl
+                          $fileNode.hash.'#text' = $newHash
+
+                          Write-Host "Updated KB ${kbId}: $newUrl"
+                      }
                   }
 
-                  $updateId = $matches[1]
-                  $detailUrl = "https://www.catalog.update.microsoft.com/ScopedViewInline.aspx?updateid=$updateId"
-                  $detail = Invoke-WebRequest $detailUrl -UseBasicParsing
-
-                  $fileName = ($detail.Content |
-                      Select-String "downloadFiles\[0\].fileName\s*=\s*'([^']+)'" |
-                      ForEach-Object { $_.Matches[0].Groups[1].Value })
-
-                  $url = ($detail.Content |
-                      Select-String "downloadFiles\[0\].url\s*=\s*'([^']+)'" |
-                      ForEach-Object { $_.Matches[0].Groups[1].Value })
-
-                  $hash = ($fileName -split '_')[-1] -replace '\.msu|\.cab',''  # 从文件名抓 hash
-
-                  if (-not $fileName -or -not $url) {
-                      Write-Warning "Failed to parse metadata for $id"
-                      continue
-                  }
-
-                  $xmlLines = @()
-                  $xmlLines += '<?xml version="1.0" encoding="utf-8"?>'
-                  $xmlLines += '<metalink xmlns="urn:ietf:params:xml:ns:metalink">'
-                  $xmlLines += "  <file name=`"$fileName`">"
-                  $xmlLines += "    <hash type=`"sha-1`">$hash</hash>"
-                  $xmlLines += "    <url>$url</url>"
-                  $xmlLines += '  </file>'
-                  $xmlLines += '</metalink>'
-
-                  $xmlLines | Out-File $outFile -Encoding UTF8
-                  Write-Host "Updated KB $id: $fileName"
-              }
-              elseif ($patch.Type -like "NET*") {
-                  Write-Host "Skipping .NET patch $id (keep existing meta4)"
+                  # 保存回 meta4 文件
+                  $xml.Save($meta4File)
+              } else {
+                  Write-Host "Skipping non-KB patch: $($patch.Id)"
               }
           }
-
-      - name: Commit & Push changes
         shell: pwsh
+
+      - name: Configure git
         run: |
-          Set-Location $env:GITHUB_WORKSPACE
           git config user.name "github-actions"
           git config user.email "github-actions@users.noreply.github.com"
-          git add Scripts/*.meta4
-          git commit -m "auto: update meta4 for latest Windows and .NET patches" -a || Write-Host "No changes to commit"
+        shell: pwsh
+
+      - name: Commit changes
+        run: |
+          git add Scripts/*.meta4 patch_list.json
+          git commit -m "auto: update meta4 for latest KB patches" -a || Write-Host "No changes to commit"
+        shell: pwsh
+
+      - name: Push to test branch
+        run: |
           git push origin HEAD:test
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
