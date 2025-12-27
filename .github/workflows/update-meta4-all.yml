@@ -9,9 +9,6 @@ on:
 permissions:
   contents: write
 
-env:
-  DRY_RUN: true   # 测试时为 true，正式运行改为 false
-
 jobs:
   update-meta4:
     runs-on: windows-latest
@@ -33,14 +30,12 @@ jobs:
         run: |
           Set-Location $env:GITHUB_WORKSPACE
 
-          # 遍历 script 及其所有子目录
           $metaFiles = Get-ChildItem -Path script -Filter *.meta4 -Recurse
           $patchList = @()
 
           foreach ($file in $metaFiles) {
               $relativePath = $file.FullName.Substring($env:GITHUB_WORKSPACE.Length + 1)
 
-              # NET 补丁目录
               if ($relativePath -match "netfx4\.8|netfx4\.81") {
                   $patchList += [PSCustomObject]@{
                       Type = "NET"
@@ -48,7 +43,6 @@ jobs:
                       File = $file.FullName
                   }
               } 
-              # KB 补丁文件名
               elseif ($file.BaseName -match "^script_\d+") {
                   $patchList += [PSCustomObject]@{
                       Type = "KB"
@@ -75,8 +69,9 @@ jobs:
               $id = $patch.Id
               $outFile = $patch.File
 
-              if (Test-Path $outFile -and $patch.Type -eq "KB") {
-                  Write-Host "$outFile exists, skipping (special CAB/MSU or already present)"
+              # 只处理 KB，如果已经有文件则跳过
+              if ($patch.Type -eq "KB" -and Test-Path $outFile) {
+                  Write-Host "$outFile exists, skipping"
                   continue
               }
 
@@ -107,7 +102,6 @@ jobs:
                       continue
                   }
 
-                  # 使用数组生成 XML，避免 YAML 解析问题
                   $xmlLines = @()
                   $xmlLines += '<?xml version="1.0" encoding="utf-8"?>'
                   $xmlLines += '<metalink xmlns="urn:ietf:params:xml:ns:metalink">'
@@ -133,12 +127,8 @@ jobs:
               exit 0
           }
 
-          if ($env:DRY_RUN -eq "true") {
-              Write-Host "Dry-run: skipping commit/push"
-          } else {
-              git config user.name "github-actions"
-              git config user.email "github-actions@github.com"
-              git add script/*.meta4 patch_list.json
-              git commit -m "auto: update meta4 for latest Windows and .NET patches"
-              git push
-          }
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add script/*.meta4 patch_list.json
+          git commit -m "auto: update meta4 for latest Windows and .NET patches"
+          git push
