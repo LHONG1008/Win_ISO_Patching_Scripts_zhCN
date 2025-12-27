@@ -119,10 +119,13 @@ jobs:
               }
           }
 
-      - name: Commit changes if any
+      - name: Commit changes to test branch
         shell: pwsh
         run: |
           Set-Location $env:GITHUB_WORKSPACE
+
+          # 创建本地 test 分支
+          git checkout -B test
 
           # 添加 patch_list.json
           git add patch_list.json
@@ -136,8 +139,9 @@ jobs:
               exit 0
           }
 
-          # 配置 Git 并提交
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git commit -m "auto: update meta4 for latest Windows and .NET patches"
-          git push
+
+          # 显式 push 到远程 test 分支（处理 detached HEAD）
+          git push origin HEAD:test --force
