@@ -14,9 +14,10 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout repository at 2025.11d
         uses: actions/checkout@v4
         with:
+          ref: v2025.11d
           fetch-depth: 0
 
       - name: Setup PowerShell module
@@ -36,7 +37,7 @@ jobs:
           foreach ($file in $metaFiles) {
               $relativePath = $file.FullName.Substring($env:GITHUB_WORKSPACE.Length + 1)
 
-              if ($relativePath -match "netfx4\.8|netfx4\.81") {
+              if ($relativePath -match "netfx4\.8\.1|netfx4\.8") {
                   $patchList += [PSCustomObject]@{
                       Type = "NET"
                       Id = $file.BaseName
@@ -67,9 +68,9 @@ jobs:
 
           foreach ($patch in $patchList) {
               $id = $patch.Id
-              $outFile = [string]$patch.File   # 确保为字符串
+              $outFile = [string]$patch.File
 
-              # 只处理 KB，如果已经有文件则跳过
+              # KB 文件存在则跳过
               if (($patch.Type -eq "KB") -and ($outFile -and (Test-Path $outFile))) {
                   Write-Host "$outFile exists, skipping"
                   continue
