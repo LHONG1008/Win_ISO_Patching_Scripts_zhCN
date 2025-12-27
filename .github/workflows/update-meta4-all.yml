@@ -1,89 +1,122 @@
-name: Update Meta4
+name: Update meta4 KBs
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 2 * * *'  # 每天凌晨 2 点自动运行，可根据需求修改
+    - cron: '0 2 * * *' # 每天 UTC 02:00 触发
 
 jobs:
   update-meta4:
     runs-on: windows-latest
+    defaults:
+      run:
+        shell: powershell
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
 
-      - name: Set working directory
-        run: Set-Location $env:GITHUB_WORKSPACE
-        shell: pwsh
-
-      - name: Update KB meta4 files
-        run: |
-          $patchListPath = Join-Path $env:GITHUB_WORKSPACE "patch_list.json"
-          if (-Not (Test-Path $patchListPath)) {
-              Write-Host "patch_list.json not found, generating..."
-              $patchList = @(
-                  # 示例，可根据需要生成
-                  @{ Type = "KB"; Id = "script_26100_x64"; File = "Scripts\script_26100_x64.meta4" }
-                  @{ Type = "KB"; Id = "script_26100_x86"; File = "Scripts\script_26100_x86.meta4" }
-              )
-              $patchList | ConvertTo-Json | Out-File $patchListPath -Encoding UTF8
-          } else {
-              $patchList = Get-Content $patchListPath | ConvertFrom-Json
-          }
-
-          foreach ($patch in $patchList) {
-              $meta4File = $patch.File
-              if (-not (Test-Path $meta4File)) {
-                  Write-Warning "$meta4File not found, skipping..."
-                  continue
-              }
-
-              if ($patch.Type -eq "KB") {
-                  Write-Host "Processing $meta4File..."
-
-                  # 读取原始 meta4 内容
-                  [xml]$xml = Get-Content $meta4File
-
-                  foreach ($fileNode in $xml.metalink.file) {
-                      $name = $fileNode.name
-                      if ($name -match "kb(\d+)") {
-                          $kbId = $matches[1]
-                          # 这里可以调用你抓取最新 KB 的逻辑
-                          # 示例：直接替换 url/hash
-                          $newUrl = $fileNode.url  # 替换为最新 URL
-                          $newHash = $fileNode.hash.'#text' # 替换为最新 hash
-
-                          # 写回 XML
-                          $fileNode.url = $newUrl
-                          $fileNode.hash.'#text' = $newHash
-
-                          Write-Host "Updated KB ${kbId}: $newUrl"
-                      }
-                  }
-
-                  # 保存回 meta4 文件
-                  $xml.Save($meta4File)
-              } else {
-                  Write-Host "Skipping non-KB patch: $($patch.Id)"
-              }
-          }
-        shell: pwsh
-
-      - name: Configure git
+      - name: Set up Git
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@users.noreply.github.com"
-        shell: pwsh
 
-      - name: Commit changes
+      - name: Update meta4 KBs
         run: |
-          git add Scripts/*.meta4 patch_list.json
-          git commit -m "auto: update meta4 for latest KB patches" -a || Write-Host "No changes to commit"
-        shell: pwsh
+          # 进入仓库根目录
+          Set-Location $env:GITHUB_WORKSPACE
 
-      - name: Push to test branch
+          # 找到所有 meta4 文件
+          $metaFiles = Get-ChildItem -Path .\Scripts -Recurse -Filter *.meta4
+
+          foreach ($metaFile in $metaFiles) {
+              Write-Host "Processing $($metaFile.FullName)..."
+              [xml]$xml = Get-Content $metaFile.FullName
+
+              $updated = $false
+
+              foreach ($fileNode in $xml.metalink.file) {
+                  $nameAttr = $fileNode.name
+                  if ($nameAttr -match 'kb\d+') {
+                      $kbId = $matches[0]
+                      Write-Host "Found KB: $kbId"
+
+                      # 构造 Microsoft Catalog 搜索 URL
+                      $searchUrl = "https://www.catalog.update.microsoft.com/Search.aspx?q=$kbId"
+                      try {
+                          $html = Invoke-WebRequest $searchUrl -UseBasicParsing
+                      } catch {
+                          Write-Warning "Failed to fetch catalog for $kbId"
+                          continue
+                      }
+
+                      if ($html.Content -notmatch "ScopedViewInline.aspx\?updateid=([a-f0-9\-]+)") {
+                          Write-Warning "UpdateID not found for $kbId"
+                          continue
+                      }
+
+                      $updateId = $matches[1]
+                      $detailUrl = "https://www.catalog.update.microsoft.com/ScopedViewInline.aspx?updateid=$updateId"
+
+                      try {
+                          $detail = Invoke-WebRequest $detailUrl -UseBasicParsing
+                      } catch {
+                          Write-Warning "Failed to fetch detail for $kbId"
+                          continue
+                      }
+
+                      # 提取文件名、URL 和 hash
+                      $newName = ($detail.Content |
+                          Select-String "downloadFiles\[0\].fileName\s*=\s*'([^']+)'" |
+                          ForEach-Object { $_.Matches[0].Groups[1].Value })
+                      $newUrl = ($detail.Content |
+                          Select-String "downloadFiles\[0\].url\s*=\s*'([^']+)'" |
+                          ForEach-Object { $_.Matches[0].Groups[1].Value })
+                      $newHash = ($detail.Content |
+                          Select-String "downloadFiles\[0\].fileHash\s*=\s*'([^']+)'" |
+                          ForEach-Object { $_.Matches[0].Groups[1].Value })
+
+                      if (-not $newName -or -not $newUrl -or -not $newHash) {
+                          Write-Warning "Failed to parse metadata for $kbId"
+                          continue
+                      }
+
+                      # 更新节点，保持 XML 结构
+                      $fileNode.name = $newName
+                      if ($fileNode.hash) {
+                          $fileNode.hash = $newHash
+                      } else {
+                          $hashNode = $xml.CreateElement("hash")
+                          $hashNode.SetAttribute("type","sha-1")
+                          $hashNode.InnerText = $newHash
+                          $fileNode.AppendChild($hashNode) | Out-Null
+                      }
+
+                      if ($fileNode.url) {
+                          $fileNode.url = $newUrl
+                      } else {
+                          $urlNode = $xml.CreateElement("url")
+                          $urlNode.InnerText = $newUrl
+                          $fileNode.AppendChild($urlNode) | Out-Null
+                      }
+
+                      Write-Host "Updated KB $kbId: $newName"
+                      $updated = $true
+                  }
+              }
+
+              if ($updated) {
+                  $xml.Save($metaFile.FullName)
+                  Write-Host "Saved updated file: $($metaFile.FullName)"
+              } else {
+                  Write-Host "No KB updates for $($metaFile.FullName)"
+              }
+          }
+
+      - name: Commit and push changes
         run: |
+          git add Scripts/**/*.meta4
+          git commit -m "auto: update meta4 for latest KBs" -ErrorAction SilentlyContinue
+          git pull --rebase origin test
           git push origin HEAD:test
-        shell: pwsh
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
