@@ -30,7 +30,7 @@ jobs:
         run: |
           Set-Location $env:GITHUB_WORKSPACE
 
-          $metaFiles = Get-ChildItem -Path script -Filter *.meta4 -Recurse
+          $metaFiles = Get-ChildItem -Path scripts -Filter *.meta4 -Recurse
           $patchList = @()
 
           foreach ($file in $metaFiles) {
@@ -122,13 +122,21 @@ jobs:
         shell: pwsh
         run: |
           Set-Location $env:GITHUB_WORKSPACE
+
+          # 添加 patch_list.json
+          git add patch_list.json
+
+          # 递归添加 scripts 目录及子目录下的所有 .meta4 文件
+          Get-ChildItem -Path scripts -Filter *.meta4 -Recurse | ForEach-Object { git add $_.FullName }
+
+          # 检查是否有变更
           if (-not (git status --porcelain)) {
               Write-Host "No changes detected."
               exit 0
           }
 
+          # 配置 Git 并提交
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          git add script/*.meta4 patch_list.json
           git commit -m "auto: update meta4 for latest Windows and .NET patches"
           git push
