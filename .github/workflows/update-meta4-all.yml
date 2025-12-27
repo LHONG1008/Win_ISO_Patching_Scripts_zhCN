@@ -1,122 +1,83 @@
-name: Update KB meta4
+name: Update Meta4 KBs
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '0 6 * * 3'  # 每周三早上6点自动运行
 
 jobs:
-  update-meta4:
+  update_meta4:
     runs-on: windows-latest
 
     steps:
-      # 1. 检出仓库
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
         with:
-          fetch-depth: 0
+          ref: test  # 指定目标分支
 
-      # 2. 设置 Git 用户信息
-      - name: Setup Git
-        run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@users.noreply.github.com"
+      - name: Setup PowerShell
+        uses: actions/setup-powershell@v2
+        with:
+          pwsh-version: '7.3'
 
-      # 3. 更新 KB meta4 文件
-      - name: Update KB meta4
+      - name: Update KB meta4 files
         shell: pwsh
         run: |
           Set-Location $env:GITHUB_WORKSPACE
 
-          # 你的 PowerShell 脚本
           $patchList = Get-Content patch_list.json | ConvertFrom-Json
 
           foreach ($patch in $patchList) {
-
+              $id = $patch.Id
               $outFile = $patch.File
 
-              if ($patch.Type -eq "KB") {
-                  if (-not (Test-Path $outFile)) {
-                      Write-Warning "File $outFile does not exist, skipping"
-                      continue
-                  }
-
-                  Write-Host "Processing KB meta4: $outFile ..."
-
+              if ($patch.Type -eq "KB" -and Test-Path $outFile) {
+                  Write-Host "$outFile exists, updating KB entries..."
+                  
                   [xml]$xml = Get-Content $outFile
 
                   foreach ($fileNode in $xml.metalink.file) {
-                      if ($fileNode.name -match "kb(\d+)") {
+                      $fileName = $fileNode.name
+                      
+                      if ($fileName -match 'kb([0-9]+)') {
                           $kbId = $matches[1]
-                      } else {
-                          Write-Warning "Cannot parse KB ID from file name: $($fileNode.name)"
-                          continue
+
+                          $searchUrl = "https://www.catalog.update.microsoft.com/Search.aspx?q=$kbId"
+                          $html = Invoke-WebRequest $searchUrl -UseBasicParsing
+                          if ($html.Content -match "ScopedViewInline.aspx\?updateid=([a-f0-9\-]+)") {
+                              $updateId = $matches[1]
+                              $detailUrl = "https://www.catalog.update.microsoft.com/ScopedViewInline.aspx?updateid=$updateId"
+                              $detail = Invoke-WebRequest $detailUrl -UseBasicParsing
+
+                              $newName = ($detail.Content | Select-String "downloadFiles\[0\].fileName\s*=\s*'([^']+)'" | ForEach-Object { $_.Matches[0].Groups[1].Value })
+                              $newUrl  = ($detail.Content | Select-String "downloadFiles\[0\].url\s*=\s*'([^']+)'" | ForEach-Object { $_.Matches[0].Groups[1].Value })
+                              $newHash = ($newName -split '_')[-1] -replace '\.msu$|\.cab$', ''
+
+                              if ($newName -and $newUrl -and $newHash) {
+                                  $fileNode.name = $newName
+                                  $fileNode.url = $newUrl
+                                  $fileNode.hash = $newHash
+                                  Write-Host "Updated KB${kbId}: $newName"
+                              } else {
+                                  Write-Warning "Failed to parse new info for KB${kbId}"
+                              }
+                          } else {
+                              Write-Warning "UpdateID not found for KB${kbId}"
+                          }
                       }
-
-                      Write-Host "Checking KB $kbId ..."
-
-                      $searchUrl = "https://www.catalog.update.microsoft.com/Search.aspx?q=KB$kbId"
-                      $html = Invoke-WebRequest $searchUrl -UseBasicParsing
-
-                      if ($html.Content -notmatch "ScopedViewInline.aspx\?updateid=([a-f0-9\-]+)") {
-                          Write-Warning "UpdateID not found for KB$kbId"
-                          continue
-                      }
-
-                      $updateId = $matches[1]
-                      $detailUrl = "https://www.catalog.update.microsoft.com/ScopedViewInline.aspx?updateid=$updateId"
-                      $detail = Invoke-WebRequest $detailUrl -UseBasicParsing
-
-                      $newName = ($detail.Content |
-                          Select-String "downloadFiles\[0\].fileName\s*=\s*'([^']+)'" |
-                          ForEach-Object { $_.Matches[0].Groups[1].Value })
-
-                      $newUrl = ($detail.Content |
-                          Select-String "downloadFiles\[0\].url\s*=\s*'([^']+)'" |
-                          ForEach-Object { $_.Matches[0].Groups[1].Value })
-
-                      $newHash = ($detail.Content |
-                          Select-String "downloadFiles\[0\].hash\s*=\s*'([^']+)'" |
-                          ForEach-Object { $_.Matches[0].Groups[1].Value })
-
-                      if (-not $newName -or -not $newUrl -or -not $newHash) {
-                          Write-Warning "Failed to parse latest info for KB$kbId"
-                          continue
-                      }
-
-                      $fileNode.name = $newName
-                      $hashNode = $fileNode.SelectSingleNode("hash")
-                      if ($hashNode -eq $null) {
-                          $hashNode = $xml.CreateElement("hash")
-                          $hashNode.SetAttribute("type", "sha-1")
-                          $fileNode.AppendChild($hashNode) | Out-Null
-                      }
-                      $hashNode.InnerText = $newHash
-
-                      $urlNode = $fileNode.SelectSingleNode("url")
-                      if ($urlNode -eq $null) {
-                          $urlNode = $xml.CreateElement("url")
-                          $fileNode.AppendChild($urlNode) | Out-Null
-                      }
-                      $urlNode.InnerText = $newUrl
-
-                      Write-Host "Updated KB$kbId: $newName"
                   }
 
                   $xml.Save($outFile)
-                  Write-Host "Saved updated meta4: $outFile"
               }
               elseif ($patch.Type -like "NET*") {
-                  Write-Host "Skipping .NET patch $($patch.Id) (keep existing meta4)"
+                  Write-Host "Skipping .NET patch $id (keep existing meta4)"
               }
           }
 
-      # 4. Commit & Push
-      - name: Commit and push changes
+      - name: Commit and Push changes
         shell: pwsh
         run: |
-          Set-Location $env:GITHUB_WORKSPACE
-          git checkout -B test
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
           git add Scripts/**/*.meta4
-          git commit -m "auto: update KB meta4 for latest patches" -a || Write-Host "No changes to commit"
-          git push origin test --force
+          git add patch_list.json
+          git commit -m "auto: update meta4 for latest Windows and .NET patches" -a || Write-Host "No changes to commit"
+          git push origin HEAD:test
