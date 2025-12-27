@@ -98,6 +98,7 @@ jobs:
                 continue
               }
 
+              # 多行字符串严格缩进，确保 YAML 解析正确
               $xml = @"
 <?xml version="1.0" encoding="utf-8"?>
 <metalink xmlns="urn:ietf:params:xml:ns:metalink">
