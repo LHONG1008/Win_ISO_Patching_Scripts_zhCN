@@ -3,8 +3,7 @@ name: Update meta4 for all versions
 on:
   workflow_dispatch:
   schedule:
-    # 每月 2-14 号每天 6:00 UTC
-    - cron: '0 6 2-14 * *'
+    - cron: '0 6 2-14 * *'  # 每月 2-14 号每天 6:00 UTC
 
 permissions:
   contents: write
@@ -14,7 +13,7 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout repository at 2025.11d
+      - name: Checkout repository at v2025.11d
         uses: actions/checkout@v4
         with:
           ref: v2025.11d
@@ -26,97 +25,73 @@ jobs:
           Set-PSRepository PSGallery -InstallationPolicy Trusted
           Install-Module PSWindowsUpdate -Force
 
-      - name: Scan existing meta4 files recursively
+      - name: Update meta4 files from Microsoft Catalog
         shell: pwsh
         run: |
           Set-Location $env:GITHUB_WORKSPACE
 
           $metaFiles = Get-ChildItem -Path scripts -Filter *.meta4 -Recurse
-          $patchList = @()
 
           foreach ($file in $metaFiles) {
-              $relativePath = $file.FullName.Substring($env:GITHUB_WORKSPACE.Length + 1)
+              $xml = [xml](Get-Content $file.FullName)
 
-              if ($relativePath -match "netfx4\.8\.1|netfx4\.8") {
-                  $patchList += [PSCustomObject]@{
-                      Type = "NET"
-                      Id = $file.BaseName
-                      File = $file.FullName
+              foreach ($f in $xml.metalink.file) {
+                  # 尝试从 <file name> 中提取 KB 编号
+                  if ($f.name -match "kb(\d+)") {
+                      $kb = $matches[1]
+                  } else {
+                      Write-Warning "Cannot extract KB from $($f.name)"
+                      continue
                   }
-              } 
-              elseif ($file.BaseName -match "^script_\d+") {
-                  $patchList += [PSCustomObject]@{
-                      Type = "KB"
-                      Id = $file.BaseName
-                      File = $file.FullName
-                  }
-              } 
-              else {
-                  Write-Host "Unknown meta4 found: $relativePath"
-              }
-          }
 
-          $patchList | ConvertTo-Json -Depth 3 | Out-File patch_list.json -Encoding UTF8
-          Write-Host "Found patches:"
-          $patchList | Format-Table
-
-      - name: Update meta4 from Catalog (skip existing)
-        shell: pwsh
-        run: |
-          Set-Location $env:GITHUB_WORKSPACE
-          $patchList = Get-Content patch_list.json | ConvertFrom-Json
-
-          foreach ($patch in $patchList) {
-              $id = $patch.Id
-              $outFile = [string]$patch.File
-
-              # KB 文件存在则跳过
-              if (($patch.Type -eq "KB") -and ($outFile -and (Test-Path $outFile))) {
-                  Write-Host "$outFile exists, skipping"
-                  continue
-              }
-
-              if ($patch.Type -eq "KB") {
-                  Write-Host "Processing KB: $id ..."
-                  $searchUrl = "https://www.catalog.update.microsoft.com/Search.aspx?q=$id"
+                  # 查询 Microsoft Catalog
+                  $searchUrl = "https://www.catalog.update.microsoft.com/Search.aspx?q=KB$kb"
                   $html = Invoke-WebRequest $searchUrl -UseBasicParsing
 
-                  if ($html.Content -notmatch "ScopedViewInline.aspx\?updateid=([a-f0-9\-]+)") {
-                      Write-Warning "UpdateID not found for $id"
-                      continue
+                  if ($html.Content -match "ScopedViewInline.aspx\?updateid=([a-f0-9\-]+)") {
+                      $updateId = $matches[1]
+                      $detailUrl = "https://www.catalog.update.microsoft.com/ScopedViewInline.aspx?updateid=$updateId"
+                      $detail = Invoke-WebRequest $detailUrl -UseBasicParsing
+
+                      $fileName = ($detail.Content |
+                          Select-String "downloadFiles\[0\].fileName\s*=\s*'([^']+)'" |
+                          ForEach-Object { $_.Matches[0].Groups[1].Value })
+
+                      $url = ($detail.Content |
+                          Select-String "downloadFiles\[0\].url\s*=\s*'([^']+)'" |
+                          ForEach-Object { $_.Matches[0].Groups[1].Value })
+
+                      $hash = ($fileName -split '_')[-1] -replace '\.msu$|\.cab$', ''
+
+                      if ($fileName -and $url -and $hash) {
+                          # 只替换 name / hash / url
+                          $f.name = $fileName
+                          if ($f.hash) {
+                              $f.hash.'#text' = $hash
+                          } else {
+                              $h = $xml.CreateElement("hash")
+                              $h.SetAttribute("type","sha-1")
+                              $h.InnerText = $hash
+                              $f.AppendChild($h) | Out-Null
+                          }
+
+                          if ($f.url) {
+                              $f.url = $url
+                          } else {
+                              $u = $xml.CreateElement("url")
+                              $u.InnerText = $url
+                              $f.AppendChild($u) | Out-Null
+                          }
+
+                          Write-Host "Updated $($file.FullName) for KB$kb"
+                      }
+                  } else {
+                      Write-Warning "UpdateID not found for KB$kb"
                   }
-
-                  $updateId = $matches[1]
-                  $detailUrl = "https://www.catalog.update.microsoft.com/ScopedViewInline.aspx?updateid=$updateId"
-                  $detail = Invoke-WebRequest $detailUrl -UseBasicParsing
-
-                  $fileName = ($detail.Content |
-                      Select-String "downloadFiles\[0\].fileName\s*=\s*'([^']+)'" |
-                      ForEach-Object { $_.Matches[0].Groups[1].Value })
-
-                  $url = ($detail.Content |
-                      Select-String "downloadFiles\[0\].url\s*=\s*'([^']+)'" |
-                      ForEach-Object { $_.Matches[0].Groups[1].Value })
-
-                  if (-not $fileName -or -not $url) {
-                      Write-Warning "Failed to parse metadata for $id"
-                      continue
-                  }
-
-                  $xmlLines = @()
-                  $xmlLines += '<?xml version="1.0" encoding="utf-8"?>'
-                  $xmlLines += '<metalink xmlns="urn:ietf:params:xml:ns:metalink">'
-                  $xmlLines += "  <file name=`"$fileName`">"
-                  $xmlLines += "    <url>$url</url>"
-                  $xmlLines += '  </file>'
-                  $xmlLines += '</metalink>'
-
-                  $xmlLines | Out-File $outFile -Encoding UTF8
-                  Write-Host "meta4 generated: $outFile"
               }
-              elseif ($patch.Type -like "NET*") {
-                  Write-Host "Skipping .NET patch $id (keep existing meta4)"
-              }
+
+              # 写回原文件，保留 XML 样式
+              $xml.Save($file.FullName)
           }
 
       - name: Commit changes to test branch
@@ -124,13 +99,10 @@ jobs:
         run: |
           Set-Location $env:GITHUB_WORKSPACE
 
-          # 创建本地 test 分支
+          # 创建本地 test 分支（覆盖已存在的）
           git checkout -B test
 
-          # 添加 patch_list.json
-          git add patch_list.json
-
-          # 递归添加 scripts 目录及子目录下的所有 .meta4 文件
+          # 递归添加 scripts/ 下所有 .meta4 文件
           Get-ChildItem -Path scripts -Filter *.meta4 -Recurse | ForEach-Object { git add $_.FullName }
 
           # 检查是否有变更
@@ -141,7 +113,7 @@ jobs:
 
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          git commit -m "auto: update meta4 for latest Windows and .NET patches"
+          git commit -m "auto: update meta4 for latest Windows KB"
 
-          # 显式 push 到远程 test 分支（处理 detached HEAD）
+          # 显式 push 到远程 test 分支（解决 detached HEAD）
           git push origin HEAD:test --force
