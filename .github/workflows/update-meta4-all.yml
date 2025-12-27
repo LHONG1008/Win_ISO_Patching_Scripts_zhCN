@@ -67,10 +67,10 @@ jobs:
 
           foreach ($patch in $patchList) {
               $id = $patch.Id
-              $outFile = $patch.File
+              $outFile = [string]$patch.File   # 确保为字符串
 
               # 只处理 KB，如果已经有文件则跳过
-              if ($patch.Type -eq "KB" -and Test-Path $outFile) {
+              if (($patch.Type -eq "KB") -and ($outFile -and (Test-Path $outFile))) {
                   Write-Host "$outFile exists, skipping"
                   continue
               }
