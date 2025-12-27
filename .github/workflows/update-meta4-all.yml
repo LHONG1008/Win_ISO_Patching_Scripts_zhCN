@@ -101,7 +101,7 @@ jobs:
                           $fileNode.AppendChild($urlNode) | Out-Null
                       }
 
-                      Write-Host "Updated KB $kbId: $newName"
+                      Write-Host "Updated KB ${kbId}: $newName"
                       $updated = $true
                   }
               }
