@@ -1,0 +1,122 @@
+[
+  {
+    "Type": "KB",
+    "Id": "script_14393_x64",
+    "File": "D:\\a\\Win_ISO_Patching_Scripts\\Win_ISO_Patching_Scripts\\Scripts\\script_14393_x64.meta4"
+  },
+  {
+    "Type": "KB",
+    "Id": "script_14393_x86",
+    "File": "D:\\a\\Win_ISO_Patching_Scripts\\Win_ISO_Patching_Scripts\\Scripts\\script_14393_x86.meta4"
+  },
+  {
+    "Type": "KB",
+    "Id": "script_17763_arm64",
+    "File": "D:\\a\\Win_ISO_Patching_Scripts\\Win_ISO_Patching_Scripts\\Scripts\\script_17763_arm64.meta4"
+  },
+  {
+    "Type": "KB",
+    "Id": "script_17763_x64",
+    "File": "D:\\a\\Win_ISO_Patching_Scripts\\Win_ISO_Patching_Scripts\\Scripts\\script_17763_x64.meta4"
+  },
+  {
+    "Type": "KB",
+    "Id": "script_17763_x86",
+    "File": "D:\\a\\Win_ISO_Patching_Scripts\\Win_ISO_Patching_Scripts\\Scripts\\script_17763_x86.meta4"
+  },
+  {
+    "Type": "KB",
+    "Id": "script_19041_arm64",
+    "File": "D:\\a\\Win_ISO_Patching_Scripts\\Win_ISO_Patching_Scripts\\Scripts\\script_19041_arm64.meta4"
+  },
+  {
+    "Type": "KB",
+    "Id": "script_19041_x64",
+    "File": "D:\\a\\Win_ISO_Patching_Scripts\\Win_ISO_Patching_Scripts\\Scripts\\script_19041_x64.meta4"
+  },
+  {
+    "Type": "KB",
+    "Id": "script_19041_x86",
+    "File": "D:\\a\\Win_ISO_Patching_Scripts\\Win_ISO_Patching_Scripts\\Scripts\\script_19041_x86.meta4"
+  },
+  {
+    "Type": "KB",
+    "Id": "script_20348_x64",
+    "File": "D:\\a\\Win_ISO_Patching_Scripts\\Win_ISO_Patching_Scripts\\Scripts\\script_20348_x64.meta4"
+  },
+  {
+    "Type": "KB",
+    "Id": "script_22621_arm64",
+    "File": "D:\\a\\Win_ISO_Patching_Scripts\\Win_ISO_Patching_Scripts\\Scripts\\script_22621_arm64.meta4"
+  },
+  {
+    "Type": "KB",
+    "Id": "script_22621_x64",
+    "File": "D:\\a\\Win_ISO_Patching_Scripts\\Win_ISO_Patching_Scripts\\Scripts\\script_22621_x64.meta4"
+  },
+  {
+    "Type": "KB",
+    "Id": "script_26100_arm64",
+    "File": "D:\\a\\Win_ISO_Patching_Scripts\\Win_ISO_Patching_Scripts\\Scripts\\script_26100_arm64.meta4"
+  },
+  {
+    "Type": "KB",
+    "Id": "script_26100_x64",
+    "File": "D:\\a\\Win_ISO_Patching_Scripts\\Win_ISO_Patching_Scripts\\Scripts\\script_26100_x64.meta4"
+  },
+  {
+    "Type": "NET",
+    "Id": "script_netfx4.8_14393_x64",
+    "File": "D:\\a\\Win_ISO_Patching_Scripts\\Win_ISO_Patching_Scripts\\Scripts\\netfx4.8\\script_netfx4.8_14393_x64.meta4"
+  },
+  {
+    "Type": "NET",
+    "Id": "script_netfx4.8_14393_x86",
+    "File": "D:\\a\\Win_ISO_Patching_Scripts\\Win_ISO_Patching_Scripts\\Scripts\\netfx4.8\\script_netfx4.8_14393_x86.meta4"
+  },
+  {
+    "Type": "NET",
+    "Id": "script_netfx4.8_17763_x64",
+    "File": "D:\\a\\Win_ISO_Patching_Scripts\\Win_ISO_Patching_Scripts\\Scripts\\netfx4.8\\script_netfx4.8_17763_x64.meta4"
+  },
+  {
+    "Type": "NET",
+    "Id": "script_netfx4.8_17763_x86",
+    "File": "D:\\a\\Win_ISO_Patching_Scripts\\Win_ISO_Patching_Scripts\\Scripts\\netfx4.8\\script_netfx4.8_17763_x86.meta4"
+  },
+  {
+    "Type": "NET",
+    "Id": "script_netfx4.8_19041_arm64",
+    "File": "D:\\a\\Win_ISO_Patching_Scripts\\Win_ISO_Patching_Scripts\\Scripts\\netfx4.8\\script_netfx4.8_19041_arm64.meta4"
+  },
+  {
+    "Type": "NET",
+    "Id": "script_netfx4.8_19041_x64",
+    "File": "D:\\a\\Win_ISO_Patching_Scripts\\Win_ISO_Patching_Scripts\\Scripts\\netfx4.8\\script_netfx4.8_19041_x64.meta4"
+  },
+  {
+    "Type": "NET",
+    "Id": "script_netfx4.8_19041_x86",
+    "File": "D:\\a\\Win_ISO_Patching_Scripts\\Win_ISO_Patching_Scripts\\Scripts\\netfx4.8\\script_netfx4.8_19041_x86.meta4"
+  },
+  {
+    "Type": "NET",
+    "Id": "script_netfx4.8_20348_x64",
+    "File": "D:\\a\\Win_ISO_Patching_Scripts\\Win_ISO_Patching_Scripts\\Scripts\\netfx4.8\\script_netfx4.8_20348_x64.meta4"
+  },
+  {
+    "Type": "NET",
+    "Id": "script_netfx4.8.1_19041_x64",
+    "File": "D:\\a\\Win_ISO_Patching_Scripts\\Win_ISO_Patching_Scripts\\Scripts\\netfx4.8.1\\script_netfx4.8.1_19041_x64.meta4"
+  },
+  {
+    "Type": "NET",
+    "Id": "script_netfx4.8.1_19041_x86",
+    "File": "D:\\a\\Win_ISO_Patching_Scripts\\Win_ISO_Patching_Scripts\\Scripts\\netfx4.8.1\\script_netfx4.8.1_19041_x86.meta4"
+  },
+  {
+    "Type": "NET",
+    "Id": "script_netfx4.8.1_20348_x64",
+    "File": "D:\\a\\Win_ISO_Patching_Scripts\\Win_ISO_Patching_Scripts\\Scripts\\netfx4.8.1\\script_netfx4.8.1_20348_x64.meta4"
+  }
+]
