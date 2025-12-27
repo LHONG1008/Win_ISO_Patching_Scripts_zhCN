@@ -1,119 +1,122 @@
-name: Update meta4 for all versions
+name: Update KB meta4
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 6 2-14 * *'  # 每月 2-14 号每天 6:00 UTC
-
-permissions:
-  contents: write
+    - cron: '0 6 * * 3'  # 每周三早上6点自动运行
 
 jobs:
   update-meta4:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout repository at v2025.11d
+      # 1. 检出仓库
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: v2025.11d
           fetch-depth: 0
 
-      - name: Setup PowerShell module
-        shell: pwsh
+      # 2. 设置 Git 用户信息
+      - name: Setup Git
         run: |
-          Set-PSRepository PSGallery -InstallationPolicy Trusted
-          Install-Module PSWindowsUpdate -Force
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
 
-      - name: Update meta4 files from Microsoft Catalog
+      # 3. 更新 KB meta4 文件
+      - name: Update KB meta4
         shell: pwsh
         run: |
           Set-Location $env:GITHUB_WORKSPACE
 
-          $metaFiles = Get-ChildItem -Path scripts -Filter *.meta4 -Recurse
+          # 你的 PowerShell 脚本
+          $patchList = Get-Content patch_list.json | ConvertFrom-Json
 
-          foreach ($file in $metaFiles) {
-              $xml = [xml](Get-Content $file.FullName)
+          foreach ($patch in $patchList) {
 
-              foreach ($f in $xml.metalink.file) {
-                  # 尝试从 <file name> 中提取 KB 编号
-                  if ($f.name -match "kb(\d+)") {
-                      $kb = $matches[1]
-                  } else {
-                      Write-Warning "Cannot extract KB from $($f.name)"
+              $outFile = $patch.File
+
+              if ($patch.Type -eq "KB") {
+                  if (-not (Test-Path $outFile)) {
+                      Write-Warning "File $outFile does not exist, skipping"
                       continue
                   }
 
-                  # 查询 Microsoft Catalog
-                  $searchUrl = "https://www.catalog.update.microsoft.com/Search.aspx?q=KB$kb"
-                  $html = Invoke-WebRequest $searchUrl -UseBasicParsing
+                  Write-Host "Processing KB meta4: $outFile ..."
 
-                  if ($html.Content -match "ScopedViewInline.aspx\?updateid=([a-f0-9\-]+)") {
+                  [xml]$xml = Get-Content $outFile
+
+                  foreach ($fileNode in $xml.metalink.file) {
+                      if ($fileNode.name -match "kb(\d+)") {
+                          $kbId = $matches[1]
+                      } else {
+                          Write-Warning "Cannot parse KB ID from file name: $($fileNode.name)"
+                          continue
+                      }
+
+                      Write-Host "Checking KB $kbId ..."
+
+                      $searchUrl = "https://www.catalog.update.microsoft.com/Search.aspx?q=KB$kbId"
+                      $html = Invoke-WebRequest $searchUrl -UseBasicParsing
+
+                      if ($html.Content -notmatch "ScopedViewInline.aspx\?updateid=([a-f0-9\-]+)") {
+                          Write-Warning "UpdateID not found for KB$kbId"
+                          continue
+                      }
+
                       $updateId = $matches[1]
                       $detailUrl = "https://www.catalog.update.microsoft.com/ScopedViewInline.aspx?updateid=$updateId"
                       $detail = Invoke-WebRequest $detailUrl -UseBasicParsing
 
-                      $fileName = ($detail.Content |
+                      $newName = ($detail.Content |
                           Select-String "downloadFiles\[0\].fileName\s*=\s*'([^']+)'" |
                           ForEach-Object { $_.Matches[0].Groups[1].Value })
 
-                      $url = ($detail.Content |
+                      $newUrl = ($detail.Content |
                           Select-String "downloadFiles\[0\].url\s*=\s*'([^']+)'" |
                           ForEach-Object { $_.Matches[0].Groups[1].Value })
 
-                      $hash = ($fileName -split '_')[-1] -replace '\.msu$|\.cab$', ''
+                      $newHash = ($detail.Content |
+                          Select-String "downloadFiles\[0\].hash\s*=\s*'([^']+)'" |
+                          ForEach-Object { $_.Matches[0].Groups[1].Value })
 
-                      if ($fileName -and $url -and $hash) {
-                          # 只替换 name / hash / url
-                          $f.name = $fileName
-                          if ($f.hash) {
-                              $f.hash.'#text' = $hash
-                          } else {
-                              $h = $xml.CreateElement("hash")
-                              $h.SetAttribute("type","sha-1")
-                              $h.InnerText = $hash
-                              $f.AppendChild($h) | Out-Null
-                          }
-
-                          if ($f.url) {
-                              $f.url = $url
-                          } else {
-                              $u = $xml.CreateElement("url")
-                              $u.InnerText = $url
-                              $f.AppendChild($u) | Out-Null
-                          }
-
-                          Write-Host "Updated $($file.FullName) for KB$kb"
+                      if (-not $newName -or -not $newUrl -or -not $newHash) {
+                          Write-Warning "Failed to parse latest info for KB$kbId"
+                          continue
                       }
-                  } else {
-                      Write-Warning "UpdateID not found for KB$kb"
-                  }
-              }
 
-              # 写回原文件，保留 XML 样式
-              $xml.Save($file.FullName)
+                      $fileNode.name = $newName
+                      $hashNode = $fileNode.SelectSingleNode("hash")
+                      if ($hashNode -eq $null) {
+                          $hashNode = $xml.CreateElement("hash")
+                          $hashNode.SetAttribute("type", "sha-1")
+                          $fileNode.AppendChild($hashNode) | Out-Null
+                      }
+                      $hashNode.InnerText = $newHash
+
+                      $urlNode = $fileNode.SelectSingleNode("url")
+                      if ($urlNode -eq $null) {
+                          $urlNode = $xml.CreateElement("url")
+                          $fileNode.AppendChild($urlNode) | Out-Null
+                      }
+                      $urlNode.InnerText = $newUrl
+
+                      Write-Host "Updated KB$kbId: $newName"
+                  }
+
+                  $xml.Save($outFile)
+                  Write-Host "Saved updated meta4: $outFile"
+              }
+              elseif ($patch.Type -like "NET*") {
+                  Write-Host "Skipping .NET patch $($patch.Id) (keep existing meta4)"
+              }
           }
 
-      - name: Commit changes to test branch
+      # 4. Commit & Push
+      - name: Commit and push changes
         shell: pwsh
         run: |
           Set-Location $env:GITHUB_WORKSPACE
-
-          # 创建本地 test 分支（覆盖已存在的）
           git checkout -B test
-
-          # 递归添加 scripts/ 下所有 .meta4 文件
-          Get-ChildItem -Path scripts -Filter *.meta4 -Recurse | ForEach-Object { git add $_.FullName }
-
-          # 检查是否有变更
-          if (-not (git status --porcelain)) {
-              Write-Host "No changes detected."
-              exit 0
-          }
-
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git commit -m "auto: update meta4 for latest Windows KB"
-
-          # 显式 push 到远程 test 分支（解决 detached HEAD）
-          git push origin HEAD:test --force
+          git add Scripts/**/*.meta4
+          git commit -m "auto: update KB meta4 for latest patches" -a || Write-Host "No changes to commit"
+          git push origin test --force
