@@ -98,17 +98,16 @@ jobs:
                 continue
               }
 
-              # 多行字符串严格缩进，确保 YAML 解析正确
-              $xml = @"
-<?xml version="1.0" encoding="utf-8"?>
-<metalink xmlns="urn:ietf:params:xml:ns:metalink">
-  <file name="$fileName">
-    <url>$url</url>
-  </file>
-</metalink>
-"@
+              # 生成 XML 使用数组 + +=，避免 @"…@" 多行字符串问题
+              $xmlLines = @()
+              $xmlLines += '<?xml version="1.0" encoding="utf-8"?>'
+              $xmlLines += '<metalink xmlns="urn:ietf:params:xml:ns:metalink">'
+              $xmlLines += "  <file name=`"$fileName`">"
+              $xmlLines += "    <url>$url</url>"
+              $xmlLines += '  </file>'
+              $xmlLines += '</metalink>'
 
-              $xml | Out-File $outFile -Encoding UTF8
+              $xmlLines | Out-File $outFile -Encoding UTF8
               Write-Host "meta4 generated: $outFile"
             }
             elseif ($patch.Type -like "NET*") {
