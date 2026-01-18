@@ -46,10 +46,27 @@ set "build="
 set "arch="
 set "isServer="
 
-dir /b /a:-d Win10*.iso 1>nul 2>nul && (for /f "delims=" %%# in ('dir /b /a:-d *.iso') do set "isofile=%%#")
-:: if EXIST "Win10*.iso" goto :NO_ISO_PATCHED_ERROR
-if NOT EXIST "*.iso" goto :NO_ISO_ERROR
-dir /b /a:-d *.iso 1>nul 2>nul && (for /f "delims=" %%# in ('dir /b /a:-d *.iso') do set "isofile=%%#")
+setlocal EnableDelayedExpansion
+set /a isoCount=0
+set "isofile="
+
+for %%f in (*.iso) do (
+    set /a isoCount+=1
+    set "isofile=%%f"
+)
+
+if !isoCount! EQU 0 (
+    endlocal
+    goto :NO_ISO_ERROR
+)
+
+if !isoCount! GTR 1 (
+    endlocal
+    goto :NO_ISO_PATCHED_ERROR
+)
+
+endlocal & set "isofile=%isofile%"
+
 if EXIST "%~dp0%ISODir%" rmdir /s /q "%~dp0%ISODir%"
 %a7z% x "%~dp0%isofile%" -o"%~dp0%ISODir%" -r
 
@@ -153,21 +170,18 @@ pause
 goto :EOF
 
 :NO_ISO_PATCHED_ERROR
-echo 发现可能已打补丁的 ISO 文件，请移除或检查。
-echo Discovering a potentially patched ISO, Please remove or check.
-echo (%isofile%)
+echo 目录中存在多个 ISO 文件，请检查是否已经生成或复制过多 ISO 文件。
+echo Multiple ISO files found, please check if already generated or copied extra ISOs.
 pause
 goto :EOF
 
 :DOWNLOAD_ERROR
-echo.
 echo 下载文件错误，请重新尝试。
 echo We have encountered an error while downloading files.
 pause
 goto :EOF
 
 :NOT_SUPPORT
-echo.
 rmdir /s /q "%~dp0%ISODir%"
 echo 不支持此 ISO 版本。或 ISO 文件异常。
 echo 版本：%build%，架构：%arch%
