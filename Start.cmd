@@ -5,7 +5,7 @@ chcp 65001
 title 官方 ISO 打补丁… Patching Official ISO...
 
 cd /d "%~dp0"
-if NOT "%cd%"=="%cd: =%" (
+if not "%cd%"=="%cd: =%" (
     echo 当前路径目录包含空格。
     echo 请移除或重命名目录不包含空格。
     echo Current directory contains spaces in its path.
@@ -46,6 +46,9 @@ set "build="
 set "arch="
 set "isServer="
 
+if not exist "%patchDir%" mkdir "%patchDir%"
+if exist "%patchDir%\aria2.log" del /f /q "%patchDir%\aria2.log"
+
 setlocal EnableDelayedExpansion
 set /a isoCount=0
 set "isofile="
@@ -67,15 +70,32 @@ if !isoCount! GTR 1 (
 
 endlocal & set "isofile=%isofile%"
 
-if EXIST "%~dp0%ISODir%" rmdir /s /q "%~dp0%ISODir%"
+if exist "%~dp0%ISODir%" rmdir /s /q "%~dp0%ISODir%"
 %a7z% x "%~dp0%isofile%" -o"%~dp0%ISODir%" -r
 
-if EXIST "%~dp0%ISODir%\sources\install.esd" (
-dism.exe /english /Export-Image /SourceImageFile:%~dp0%ISODir%\sources\install.esd /All /DestinationImageFile:%~dp0%ISODir%\sources\install.wim /Compress:max
-del /f /q "%~dp0%ISODir%\sources\install.esd"
+set "IMG=%~dp0%ISODir%\sources\install.wim"
+if not exist "%IMG%" set "IMG=%~dp0%ISODir%\sources\install.esd"
+
+    echo =====================================================
+    echo 警告：该 ISO 包含 pending.xml。请使用干净官方 ISO。
+    echo Warning: This ISO contains pending.xml. Please use a clean official ISO.
+    echo =====================================================
+    pause
+    goto :EOF
 )
 
-if NOT EXIST "%~dp0%ISODir%\sources\install.wim" (goto :NOT_SUPPORT)
+set imgcount=0
+if exist "%~dp0%ISODir%\sources\install.esd" (
+    for /f "tokens=2 delims=: " %%# in ('dism.exe /English /Get-WimInfo /WimFile:"%~dp0%ISODir%\sources\install.esd" ^| find /i "Index"') do (
+        set imgcount=%%#
+    )
+)
+for /L %%# in (1,1,%imgcount%) do (
+    dism.exe /English /Export-Image /SourceImageFile:"%~dp0%ISODir%\sources\install.esd" /SourceIndex:%%# /DestinationImageFile:"%~dp0%ISODir%\sources\install.wim" /Compress:max
+)
+if exist "%~dp0%ISODir%\sources\install.wim" if exist "%~dp0%ISODir%\sources\install.esd" del /f /q "%~dp0%ISODir%\sources\install.esd"
+
+if not exist "%~dp0%ISODir%\sources\install.wim" (goto :NOT_SUPPORT)
 
 dism.exe /english /get-wiminfo /wimfile:"%~dp0%ISODir%\sources\install.wim" /index:1 | findstr /i /c:"Version : 10." /c:"Version : 11." >nul || (
     set "MESSAGE=发现 wim 版本不是 Windows 10 或 11 / Detected wim version is not Windows 10 or 11"
@@ -95,8 +115,8 @@ if %build%==20349 (set /a build=20348)
 if %build%==22631 (set /a build=22621)
 if %build%==26200 (set /a build=26100)
 
-if NOT EXIST %aria2% goto :NO_ARIA2_ERROR
-if NOT EXIST %a7z% goto :NO_FILE_ERROR
+if not exist %aria2% goto :NO_ARIA2_ERROR
+if not exist %a7z% goto :NO_FILE_ERROR
 
 set "metaFile=Scripts\script_%build%_%arch%.meta4"
 
@@ -104,40 +124,45 @@ if "%build%"=="26100" if defined isServer (
     set "metaFile=Scripts\script_server_%build%_%arch%.meta4"
 )
 
-if NOT EXIST "%metaFile%" goto :NOT_SUPPORT
+if not exist "%metaFile%" goto :NOT_SUPPORT
 
 echo 正在下载补丁…
 echo Patches Downloading...
-"%aria2%" --no-conf --check-certificate=false -x16 -s16 -j5 -c -R -d "%patchDir%" -M "%metaFile%"
+"%aria2%" --no-conf --check-certificate=false -x16 -s16 -j5 -c -R -d "%patchDir%" -M "%metaFile%" --log="%patchDir%\aria2.log" --log-level=notice
 if %ERRORLEVEL% GTR 0 call :DOWNLOAD_ERROR & exit /b 1
 
 set netfx481=
 for /f "tokens=2 delims==" %%i in ('findstr netfx481 W10UI.ini') do (
-set netfx481=%%i
+    set netfx481=%%i
 )
 
 if "%build%" geq "19041" if "%build%" leq "22000" (
-if "%netfx481%" equ "1" (
-if exist "Scripts\netfx4.8.1\script_netfx4.8.1_%build%_%arch%.meta4" (
-"%aria2%" --no-conf --check-certificate=false -x16 -s16 -j5 -c -R -d "%patchDir%" -M "Scripts\netfx4.8.1\script_netfx4.8.1_%build%_%arch%.meta4" --metalink-language="neutral"
-if "%lang%" neq "en-US" (
-"%aria2%" --no-conf --check-certificate=false -x16 -s16 -j5 -c -R -d "%patchDir%" -M "Scripts\netfx4.8.1\script_netfx4.8.1_%build%_%arch%.meta4" --metalink-language="%lang%"
-))
-if not exist "Scripts\netfx4.8.1\script_netfx4.8.1_%build%_%arch%.meta4" if exist "Scripts\netfx4.8\script_netfx4.8_%build%_%arch%.meta4" (
-"%aria2%" --no-conf --check-certificate=false -x16 -s16 -j5 -c -R -d "%patchDir%" -M "Scripts\netfx4.8\script_netfx4.8_%build%_%arch%.meta4" --metalink-language="neutral"
-))
-if "%netfx481%" neq "1" if exist "Scripts\netfx4.8\script_netfx4.8_%build%_%arch%.meta4" (
-"%aria2%" --no-conf --check-certificate=false -x16 -s16 -j5 -c -R -d "%patchDir%" -M "Scripts\netfx4.8\script_netfx4.8_%build%_%arch%.meta4" --metalink-language="neutral"
-))
+    if "%netfx481%" equ "1" (
+        if exist "Scripts\netfx4.8.1\script_netfx4.8.1_%build%_%arch%.meta4" (
+            "%aria2%" --no-conf --check-certificate=false -x16 -s16 -j5 -c -R -d "%patchDir%" -M "Scripts\netfx4.8.1\script_netfx4.8.1_%build%_%arch%.meta4" --metalink-language="neutral" --log="%patchDir%\aria2.log" --log-level=notice
+            if "%lang%" neq "en-US" (
+                "%aria2%" --no-conf --check-certificate=false -x16 -s16 -j5 -c -R -d "%patchDir%" -M "Scripts\netfx4.8.1\script_netfx4.8.1_%build%_%arch%.meta4" --metalink-language="%lang%" --log="%patchDir%\aria2.log" --log-level=notice
+            )
+        )
+        if not exist "Scripts\netfx4.8.1\script_netfx4.8.1_%build%_%arch%.meta4" if exist "Scripts\netfx4.8\script_netfx4.8_%build%_%arch%.meta4" (
+            "%aria2%" --no-conf --check-certificate=false -x16 -s16 -j5 -c -R -d "%patchDir%" -M "Scripts\netfx4.8\script_netfx4.8_%build%_%arch%.meta4" --metalink-language="neutral" --log="%patchDir%\aria2.log" --log-level=notice
+        )
+        if "%netfx481%" neq "1" if exist "Scripts\netfx4.8\script_netfx4.8_%build%_%arch%.meta4" (
+            "%aria2%" --no-conf --check-certificate=false -x16 -s16 -j5 -c -R -d "%patchDir%" -M "Scripts\netfx4.8\script_netfx4.8_%build%_%arch%.meta4" --metalink-language="neutral" --log="%patchDir%\aria2.log" --log-level=notice
+        )
+    )
+)
 
 if "%build%" geq "14393" if "%build%" leq "17763" (
-if exist "Scripts\netfx4.8\script_netfx4.8_%build%_%arch%.meta4" (
-"%aria2%" --no-conf --check-certificate=false -x16 -s16 -j5 -c -R -d "%patchDir%" -M "Scripts\netfx4.8\script_netfx4.8_%build%_%arch%.meta4" --metalink-language="neutral"
-if "%lang%" neq "en-US" (
-"%aria2%" --no-conf --check-certificate=false -x16 -s16 -j5 -c -R -d "%patchDir%" -M "Scripts\netfx4.8\script_netfx4.8_%build%_%arch%.meta4" --metalink-language="%lang%"
-)))
+    if exist "Scripts\netfx4.8\script_netfx4.8_%build%_%arch%.meta4" (
+        "%aria2%" --no-conf --check-certificate=false -x16 -s16 -j5 -c -R -d "%patchDir%" -M "Scripts\netfx4.8\script_netfx4.8_%build%_%arch%.meta4" --metalink-language="neutral" --log="%patchDir%\aria2.log" --log-level=notice
+        if "%lang%" neq "en-US" (
+            "%aria2%" --no-conf --check-certificate=false -x16 -s16 -j5 -c -R -d "%patchDir%" -M "Scripts\netfx4.8\script_netfx4.8_%build%_%arch%.meta4" --metalink-language="%lang%" --log="%patchDir%\aria2.log" --log-level=notice
+        )
+    )
+)
 
-if EXIST W10UI.cmd goto :START_WORKWORK
+if exist W10UI.cmd goto :START_WORKWORK
 pause
 goto :EOF
 
