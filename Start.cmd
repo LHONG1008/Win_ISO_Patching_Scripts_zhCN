@@ -76,6 +76,8 @@ if exist "%~dp0%ISODir%" rmdir /s /q "%~dp0%ISODir%"
 set "IMG=%~dp0%ISODir%\sources\install.wim"
 if not exist "%IMG%" set "IMG=%~dp0%ISODir%\sources\install.esd"
 
+%a7z% l "%IMG%" | findstr /i "Windows\\winsxs\\pending.xml" >nul
+if errorlevel 0 if not errorlevel 1 (
     echo =====================================================
     echo 警告：该 ISO 包含 pending.xml。请使用干净官方 ISO。
     echo Warning: This ISO contains pending.xml. Please use a clean official ISO.
