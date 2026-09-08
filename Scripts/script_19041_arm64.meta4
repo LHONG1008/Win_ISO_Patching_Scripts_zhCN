@@ -4,16 +4,16 @@
 		<hash type="sha-1">a4cc6e95084da14adb972e1d67cf573a244ed7a3</hash>
 		<url>https://catalog.s.download.windowsupdate.com/c/upgr/2022/07/windows10.0-kb5015684-arm64_a4cc6e95084da14adb972e1d67cf573a244ed7a3.msu</url>
 	</file>
-	<file name="windows10.0-kb5074207-arm64_c683cabc28397ea569916cd966f7f7151ae6faa0.cab">
-		<hash type="sha-1">c683cabc28397ea569916cd966f7f7151ae6faa0</hash>
-		<url>https://catalog.s.download.windowsupdate.com/c/msdownload/update/software/crup/2026/01/windows10.0-kb5074207-arm64_c683cabc28397ea569916cd966f7f7151ae6faa0.cab</url>
+	<file name="windows10.0-kb5122878-arm64_9fe6a6b391f1853c814ea47b38f2b2006d47be15.msu">
+		<hash type="sha-1">9fe6a6b391f1853c814ea47b38f2b2006d47be15</hash>
+		<url>https://catalog.s.download.windowsupdate.com/d/msdownload/update/software/secu/2026/09/windows10.0-kb5122878-arm64_9fe6a6b391f1853c814ea47b38f2b2006d47be15.msu</url>
 	</file>
-	<file name="windows10.0-kb5120248-arm64_407aff8629db047f32889c23ca9757843ab73e99.cab">
-		<hash type="sha-1">407aff8629db047f32889c23ca9757843ab73e99</hash>
-		<url>https://catalog.s.download.windowsupdate.com/d/msdownload/update/software/crup/2026/08/windows10.0-kb5120248-arm64_407aff8629db047f32889c23ca9757843ab73e99.cab</url>
+	<file name="windows10.0-kb5122887-arm64_5f6d653825f0dfe45b1e7fa7320dace1b08d28b7.cab">
+		<hash type="sha-1">5f6d653825f0dfe45b1e7fa7320dace1b08d28b7</hash>
+		<url>https://catalog.s.download.windowsupdate.com/d/msdownload/update/software/crup/2026/09/windows10.0-kb5122887-arm64_5f6d653825f0dfe45b1e7fa7320dace1b08d28b7.cab</url>
 	</file>
-	<file name="windows10.0-kb5120249-arm64_8f2fd045e5abef4d50e1d5d4233f4e5bbc62da10.msu">
-		<hash type="sha-1">8f2fd045e5abef4d50e1d5d4233f4e5bbc62da10</hash>
-		<url>https://catalog.s.download.windowsupdate.com/d/msdownload/update/software/secu/2026/08/windows10.0-kb5120249-arm64_8f2fd045e5abef4d50e1d5d4233f4e5bbc62da10.msu</url>
+	<file name="windows10.0-kb5126029-arm64_4fd7ddd805957f8f24ad3a1aa4545fcbdcfecd79.cab">
+		<hash type="sha-1">4fd7ddd805957f8f24ad3a1aa4545fcbdcfecd79</hash>
+		<url>https://catalog.s.download.windowsupdate.com/c/msdownload/update/software/crup/2026/09/windows10.0-kb5126029-arm64_4fd7ddd805957f8f24ad3a1aa4545fcbdcfecd79.cab</url>
 	</file>
 </metalink>
