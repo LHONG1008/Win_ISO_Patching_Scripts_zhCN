@@ -21,7 +21,7 @@
 |**Windows Server 2025**|**Build 26100.33438**|
 |**Windows 11 25H2、Windows 11 企业版 LTSC 2024**|**Build 26200.9445**|
 |**Windows 11 26H2**|**Build 26300.9278（默认不集成，W10UI.ini 中 apply26h2=1 开启）**|
-|**Windows 11 26H1**|**Build 28000.2804（x64 版本不推荐）**|
+|**Windows 11 26H1**|**Build 28000.2954（x64 版本不推荐）**|
 
 ###### 一些设置（位于文件夹根目录 W10UI.ini）：
 |值（预设）|说明|

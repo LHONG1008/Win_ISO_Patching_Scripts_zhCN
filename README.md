@@ -21,7 +21,7 @@
 |**Windows Server 2025**|**Build 26100.33438**|
 |**Windows 11 25H2, Windows 11 Enterprise LTSC 2024**|**Build 26200.9445**|
 |**Windows 11 26H2**|**Build 26300.9278 (disabled by default, enable with apply26h2=1 in W10UI.ini)**|
-|**Windows 11 26H1**|**Build 28000.2804 (x64 Version is not recommended)**|
+|**Windows 11 26H1**|**Build 28000.2954 (x64 Version is not recommended)**|
 
 ###### Some settings (located in the W10UI.ini file in the root directory of the folder):
 |Value (Default)|Description|
